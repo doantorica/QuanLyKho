@@ -35,22 +35,3 @@
 2025-02-27 20:58:23,504 - ERROR - Lỗi khi khởi động ứng dụng: TabGroup.update() got an unexpected keyword argument 'selected_tab'
 2025-02-27 21:00:12,707 - ERROR - Lỗi khi khởi động ứng dụng: TabGroup.update() got an unexpected keyword argument 'selected_tab'
 2025-02-27 21:03:19,793 - ERROR - Lỗi khi khởi động ứng dụng: TabGroup.update() got an unexpected keyword argument 'selected_tab'
-2025-02-28 11:56:35,227 - ERROR - Lỗi khi lấy danh sách vật tư: Lỗi khi lấy danh sách vật tư: 1146 (42S02): Table 'quan_ly_vat_tu.inventory_items' doesn't exist
-2025-02-28 12:06:47,498 - ERROR - Lỗi không xác định trong đăng nhập: Lỗi thiết lập bảng vật tư: 1061 (42000): Duplicate key name 'idx_id'
-2025-02-28 12:16:00,602 - ERROR - Lỗi khi tạo chỉ mục cho inventory_items: 1061 (42000): Duplicate key name 'idx_id'
-2025-02-28 12:16:08,156 - ERROR - Lỗi khi tạo chỉ mục cho sales_history: 1061 (42000): Duplicate key name 'idx_item_id'
-2025-02-28 12:16:08,830 - ERROR - Lỗi khi tạo chỉ mục cho import_history: 1061 (42000): Duplicate key name 'idx_item_id'
-2025-02-28 12:22:55,061 - ERROR - Lỗi không xác định trong đăng nhập: module 'PySimpleGUI' has no attribute 'popup_warning'
-2025-02-28 12:29:47,198 - ERROR - Lỗi thiết lập database: 2014 (HY000): Commands out of sync; you can't run this command now
-2025-02-28 12:29:48,940 - ERROR - Lỗi kết nối database: 2014 (HY000): Commands out of sync; you can't run this command now
-2025-02-28 12:40:40,569 - ERROR - Lỗi khi lấy lịch sử bán: Lỗi khi lấy lịch sử bán: 1054 (42S22): Unknown column 'quantity' in 'field list'
-2025-02-28 12:40:43,780 - ERROR - Lỗi khi làm mới bảng lịch sử nhập: 'InventoryManager' object has no attribute 'fetch_import_history'
-2025-02-28 12:40:44,980 - ERROR - Lỗi khi làm mới bảng máy photocopy: 'InventoryManager' object has no attribute 'fetch_all_photocopy_machines'
-2025-02-28 12:40:45,558 - ERROR - Lỗi khi lấy lịch sử bảo trì: 'PhotocopyDatabase' object has no attribute 'fetch_maintenance_history'
-2025-02-28 12:40:46,062 - ERROR - Lỗi khi chọn tab mặc định: TabGroup.update() got an unexpected keyword argument 'selected_tab'
-2025-02-28 12:40:49,156 - ERROR - Lỗi trong xử lý sự kiện: name 'refresh_items_table' is not defined
-2025-02-28 12:44:35,698 - ERROR - Lỗi khi lấy lịch sử bán: Lỗi khi lấy lịch sử bán: 1054 (42S22): Unknown column 'quantity' in 'field list'
-2025-02-28 12:44:36,948 - ERROR - Lỗi khi làm mới bảng lịch sử nhập: 'InventoryManager' object has no attribute 'fetch_import_history'
-2025-02-28 12:44:37,737 - ERROR - Lỗi khi làm mới bảng máy photocopy: 'InventoryManager' object has no attribute 'fetch_all_photocopy_machines'
-2025-02-28 12:44:38,318 - ERROR - Lỗi khi lấy lịch sử bảo trì: 'PhotocopyDatabase' object has no attribute 'fetch_maintenance_history'
-2025-02-28 12:44:38,776 - ERROR - Lỗi khi chọn tab mặc định: TabGroup.update() got an unexpected keyword argument 'selected_tab'
