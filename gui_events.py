@@ -1,10 +1,10 @@
+import mysql.connector
 import PySimpleGUI as sg
 from datetime import datetime
 from gui_refresh import (refresh_items_table, refresh_sales_table, refresh_import_table,
                          refresh_photocopy_table, refresh_rental_table, refresh_maintenance_table,
                          refresh_photocopy_sales_table)
 from stats import show_vat_tu_stats_window, show_photocopy_detailed_stats_window
-
 
 def handle_events(window, event, values, inventory_manager, current_item_id, selected_machine_id=None, vat_tu_page=1,
                   photocopy_page=1, user_role='user'):
@@ -16,9 +16,13 @@ def handle_events(window, event, values, inventory_manager, current_item_id, sel
         for key in content_keys:
             window[key].update(visible=(key == content_key))
 
+    # Điều hướng tab "Quản Lý Máy Photocopy"
     if event == "Danh Sách Máy":
         show_content('machines_list')
         refresh_photocopy_table(window, inventory_manager, photocopy_page)
+        due_machines = inventory_manager.check_maintenance_due()
+        if due_machines:
+            sg.popup("Các máy cần bảo trì:\n" + "\n".join([f"ID: {m[0]} - {m[1]}" for m in due_machines]), title="Cảnh Báo Bảo Trì")
     elif event == "Nhập Máy":
         show_content('import_machine')
     elif event == "Bán Máy":
@@ -33,6 +37,8 @@ def handle_events(window, event, values, inventory_manager, current_item_id, sel
     elif event == "Bảo Trì":
         show_content('maintenance')
         refresh_maintenance_table(window, inventory_manager)
+
+    # Xử lý chọn vật tư
     elif event == "table":
         selected_rows = values["table"]
         if selected_rows:
@@ -40,12 +46,15 @@ def handle_events(window, event, values, inventory_manager, current_item_id, sel
             current_item_id = row[selected_rows[0]][0]
             window["loai"].update(row[selected_rows[0]][1])
             window["nha_cung_cap"].update(row[selected_rows[0]][2])
+
+    # Xóa vật tư hoặc máy photocopy
     elif event == "Xóa":
         if window.Element('TabGroup').Get() == 'Quản Lý Vật Tư':
+            print("Đang xử lý xóa vật tư")
             selected_rows = values["table"]
             if selected_rows:
-                item_id = inventory_manager.fetch_all_items(offset=(vat_tu_page - 1) * 10, limit=10)[selected_rows[0]][
-                    0]
+                item_id = inventory_manager.fetch_all_items(offset=(vat_tu_page - 1) * 10, limit=10)[selected_rows[0]][0]
+                print(f"Đã chọn vật tư ID: {item_id}")
                 if sg.popup_yes_no(f"Bạn có chắc muốn xóa vật tư ID {item_id}?") == "Yes":
                     if inventory_manager.delete_item(item_id):
                         sg.popup("Xóa thành công!")
@@ -56,6 +65,7 @@ def handle_events(window, event, values, inventory_manager, current_item_id, sel
             else:
                 sg.popup_error("Vui lòng chọn một vật tư để xóa!")
         else:
+            print("Đang xử lý xóa máy photocopy")
             selected_rows = values["photocopy_table"]
             machines = inventory_manager.fetch_all_photocopy_machines(offset=(photocopy_page - 1) * 15, limit=15,
                                                                       force_refresh=True)
@@ -64,6 +74,7 @@ def handle_events(window, event, values, inventory_manager, current_item_id, sel
                 return current_item_id, selected_machine_id, vat_tu_page, photocopy_page
             if selected_rows and 0 <= selected_rows[0] < len(machines):
                 machine_id = machines[selected_rows[0]][0]
+                print(f"Đã chọn máy photocopy ID: {machine_id}")
                 if sg.popup_yes_no(f"Bạn có chắc muốn xóa máy photocopy ID {machine_id}?") == "Yes":
                     if inventory_manager.delete_photocopy_machine(machine_id):
                         sg.popup("Xóa máy photocopy thành công!")
@@ -73,390 +84,366 @@ def handle_events(window, event, values, inventory_manager, current_item_id, sel
                         sg.popup_error("Không thể xóa máy!")
             else:
                 sg.popup_error("Vui lòng chọn một máy hợp lệ để xóa!")
-    elif event == "Bán":
-        if current_item_id and values["so_luong_ban"] and values["gia_ban"] and values["customer_name"] and values[
-            "customer_phone"]:
+
+    # Cập nhật counter
+    elif event == "update_counter":
+        selected_rows = values["photocopy_table"]
+        if selected_rows:
+            machines = inventory_manager.fetch_all_photocopy_machines(offset=(photocopy_page - 1) * 15, limit=15)
+            if selected_rows[0] < len(machines):
+                machine_id = machines[selected_rows[0]][0]
+                counter_window = sg.Window("Cập Nhật Counter", [
+                    [sg.Text(f"Máy ID: {machine_id}"), sg.Text(f"Tên Máy: {machines[selected_rows[0]][2]}")],
+                    [sg.Text("Số Counter Hiện Tại:"), sg.Text(str(machines[selected_rows[0]][3]))],
+                    [sg.Text("Số Counter Mới:"), sg.Input(key="new_counter")],
+                    [sg.Button("Xác Nhận"), sg.Button("Hủy"), sg.Button("Xem Lịch Sử Counter", key="view_counter_history")]
+                ], size=(400, 200))
+                while True:
+                    counter_event, counter_values = counter_window.read()
+                    if counter_event in (sg.WIN_CLOSED, "Hủy"):
+                        break
+                    elif counter_event == "Xác Nhận" and counter_values["new_counter"]:
+                        try:
+                            new_counter = int(counter_values["new_counter"])
+                            if new_counter < machines[selected_rows[0]][3]:
+                                sg.popup_error("Số counter mới phải lớn hơn hoặc bằng số hiện tại!")
+                                continue
+                            inventory_manager.cursor.execute(
+                                "UPDATE photocopy_machines SET so_counter = %s WHERE id = %s",
+                                (new_counter, machine_id)
+                            )
+                            inventory_manager.cursor.execute(
+                                "INSERT INTO counter_history (machine_id, counter_value, record_date) VALUES (%s, %s, %s)",
+                                (machine_id, new_counter, date.today())
+                            )
+                            inventory_manager.conn.commit()
+                            inventory_manager.machines_cache = None
+                            inventory_manager.counter_cache = None
+                            refresh_photocopy_table(window, inventory_manager, photocopy_page)
+                            sg.popup("Cập nhật counter thành công!")
+                            break
+                        except ValueError:
+                            sg.popup_error("Số counter phải là số nguyên!")
+                        except mysql.connector.Error as err:
+                            sg.popup_error(f"Lỗi khi cập nhật counter: {err}")
+                    elif counter_event == "view_counter_history":
+                        history = inventory_manager.fetch_counter_history(machine_id, force_refresh=True)
+                        if history:
+                            sg.popup_scrolled("Lịch Sử Counter:\n" + "\n".join([f"{h[0]}: {h[1]}" for h in history]),
+                                              title=f"Lịch Sử Counter Máy ID {machine_id}", size=(400, 300))
+                        else:
+                            sg.popup("Chưa có lịch sử counter cho máy này!")
+                counter_window.close()
+
+    # Kiểm tra bảo trì
+    elif event == "check_maintenance":
+        due_machines = inventory_manager.check_maintenance_due()
+        if due_machines:
+            sg.popup_scrolled("Các máy cần bảo trì:\n" + "\n".join([f"ID: {m[0]} - {m[1]}" for m in due_machines]),
+                              title="Cảnh Báo Bảo Trì", size=(400, 300))
+        else:
+            sg.popup("Hiện không có máy nào cần bảo trì!")
+
+    # Nhập hàng vật tư
+    elif event == "Nhập Hàng":
+        loai = values["loai"]
+        nha_cung_cap = values["nha_cung_cap"]
+        so_luong_nhap = values["so_luong_nhap"]
+        gia_nhap_hang = values["gia_nhap_hang"]
+        if not all([loai, nha_cung_cap, so_luong_nhap]):
+            sg.popup_error("Vui lòng điền đầy đủ thông tin loại, nhà cung cấp và số lượng!")
+        else:
             try:
-                quantity = int(values["so_luong_ban"])
-                price = float(values["gia_ban"])
-                customer_name = values["customer_name"].strip()
-                customer_phone = values["customer_phone"].strip()
-                if inventory_manager.sell_item(current_item_id, quantity, price, customer_name, customer_phone):
-                    sg.popup("Bán hàng thành công!")
+                so_luong_nhap = int(so_luong_nhap)
+                gia_nhap_hang = float(gia_nhap_hang) if gia_nhap_hang else None
+                item_id = inventory_manager.import_item(loai, nha_cung_cap, so_luong_nhap, gia_nhap_hang)
+                if item_id:
+                    sg.popup(f"Nhập hàng thành công! ID vật tư: {item_id}")
+                    window["so_luong_nhap"].update("")
+                    window["gia_nhap_hang"].update("")
                     refresh_items_table(window, inventory_manager, vat_tu_page)
-                    refresh_sales_table(window, inventory_manager)
+                    refresh_import_table(window, inventory_manager)
+                else:
+                    sg.popup_error("Nhập hàng thất bại!")
+            except ValueError:
+                sg.popup_error("Số lượng và giá nhập phải là số!")
+
+    # Bán vật tư
+    elif event == "Bán":
+        so_luong_ban = values["so_luong_ban"]
+        gia_ban = values["gia_ban"]
+        customer_name = values["customer_name"]
+        customer_phone = values["customer_phone"]
+        if not current_item_id:
+            sg.popup_error("Vui lòng chọn một vật tư để bán!")
+        elif not all([so_luong_ban, gia_ban, customer_name, customer_phone]):
+            sg.popup_error("Vui lòng điền đầy đủ thông tin bán hàng!")
+        else:
+            try:
+                so_luong_ban = int(so_luong_ban)
+                gia_ban = float(gia_ban)
+                if inventory_manager.sell_item(current_item_id, so_luong_ban, gia_ban, customer_name, customer_phone):
+                    sg.popup("Bán hàng thành công!")
                     window["so_luong_ban"].update("")
                     window["gia_ban"].update("")
                     window["customer_name"].update("")
                     window["customer_phone"].update("")
-            except ValueError as e:
-                sg.popup_error(f"Lỗi dữ liệu: {e}")
+                    refresh_items_table(window, inventory_manager, vat_tu_page)
+                    refresh_sales_table(window, inventory_manager)
+                else:
+                    sg.popup_error("Bán hàng thất bại!")
+            except ValueError:
+                sg.popup_error("Số lượng bán và giá bán phải là số!")
+
+    # Nhập máy photocopy
+    elif event == "Xác Nhận Nhập Máy":
+        loai_may = values["import_loai_may"]
+        ten_may = values["import_ten_may"]
+        so_counter = values["import_so_counter"]
+        gia_nhap_may = values["import_gia_nhap_may"]
+        serial_number = values["import_serial_number"]
+        if not all([loai_may, ten_may, so_counter, gia_nhap_may, serial_number]):
+            sg.popup_error("Vui lòng điền đầy đủ thông tin nhập máy!")
         else:
-            sg.popup_error("Vui lòng chọn vật tư và nhập đủ thông tin bán hàng!")
-    elif event == "Nhập Hàng":
-        try:
-            loai = values["loai"].strip()
-            nha_cung_cap = values["nha_cung_cap"].strip()
-            so_luong_nhap = values["so_luong_nhap"].strip()
-            gia_nhap_hang = values["gia_nhap_hang"].strip()
-            if not loai or not nha_cung_cap or not so_luong_nhap:
-                sg.popup_error("Vui lòng nhập đầy đủ Loại, Nhà Cung Cấp và Số Lượng Nhập!")
-                return current_item_id, selected_machine_id, vat_tu_page, photocopy_page
-            quantity = int(so_luong_nhap)
-            price = float(gia_nhap_hang) if gia_nhap_hang else None
-            item_id = inventory_manager.import_item(loai, nha_cung_cap, quantity, price)
-            if item_id:
-                current_item_id = item_id
-                sg.popup("Nhập hàng thành công!")
-                refresh_items_table(window, inventory_manager, vat_tu_page)
-                refresh_import_table(window, inventory_manager)
-                window["so_luong_nhap"].update("")
-                window["gia_nhap_hang"].update("")
-            else:
-                sg.popup_error("Không thể nhập hàng!")
-        except ValueError as e:
-            sg.popup_error(f"Lỗi dữ liệu nhập hàng: {e}")
+            try:
+                so_counter = int(so_counter)
+                gia_nhap_may = float(gia_nhap_may)
+                machine_id = inventory_manager.import_photocopy_machine(loai_may, ten_may, so_counter, gia_nhap_may, serial_number)
+                if machine_id:
+                    sg.popup(f"Nhập máy thành công! ID máy: {machine_id}")
+                    window["import_loai_may"].update("")
+                    window["import_ten_may"].update("")
+                    window["import_so_counter"].update("")
+                    window["import_gia_nhap_may"].update("")
+                    window["import_serial_number"].update("")
+                    refresh_photocopy_table(window, inventory_manager, photocopy_page)
+            except ValueError:
+                sg.popup_error("Số counter và giá nhập phải là số!")
+
+    # Bán máy photocopy
     elif event == "photocopy_table":
         selected_rows = values["photocopy_table"]
         if selected_rows:
-            # Lấy danh sách máy từ photocopy_machines
-            machines = inventory_manager.fetch_all_photocopy_machines(offset=(photocopy_page - 1) * 15, limit=15,
-                                                                      force_refresh=True)
-            if not machines:
-                sg.popup_error("Không có máy nào trong kho!")
-                return current_item_id, selected_machine_id, vat_tu_page, photocopy_page
-
-            machine = machines[selected_rows[0]]
-            selected_machine_id = machine[0]
-
-            # Cập nhật thông tin cơ bản từ photocopy_machines (nếu máy còn trong kho)
-            window["sell_loai_may"].update(machine[1])
-            window["sell_ten_may"].update(machine[2])
-            window["sell_so_counter"].update(str(machine[3]))
-            window["sell_gia_nhap"].update(f"{machine[6]:,.2f} VND")
-            window["sell_serial_number"].update(machine[7])
-            window["rent_loai_may"].update(machine[1])
-            window["rent_ten_may"].update(machine[2])
-            window["rent_so_counter"].update(str(machine[3]))
-            window["rent_gia_nhap"].update(f"{machine[6]:,.2f} VND")
-            window["rent_serial_number"].update(machine[7])
-
-            # Kiểm tra lịch sử bán để lấy thông tin khách hàng (bao gồm máy đã bán)
-            try:
-                # Kiểm tra trong photocopy_sales_history cho máy đã bán
-                inventory_manager.cursor.execute(
-                    "SELECT customer_name, customer_phone FROM photocopy_sales_history WHERE machine_id = %s ORDER BY sale_date DESC LIMIT 1",
-                    (selected_machine_id,)
-                )
-                sale_info = inventory_manager.cursor.fetchone()
-                if sale_info:
-                    window["sell_customer_name_may"].update(sale_info[0] or "")
-                    window["sell_customer_phone_may"].update(sale_info[1] or "")
-                else:
-                    # Nếu không tìm thấy trong lịch sử bán, kiểm tra máy còn trong kho không
-                    inventory_manager.cursor.execute(
-                        "SELECT trang_thai FROM photocopy_machines WHERE id = %s",
-                        (selected_machine_id,)
-                    )
-                    machine_status = inventory_manager.cursor.fetchone()
-                    if machine_status and machine_status[0] == 'Trong Kho':
-                        window["sell_customer_name_may"].update("")
-                        window["sell_customer_phone_may"].update("")
-                    else:
-                        sg.popup_error(f"Máy ID {selected_machine_id} đã được bán, không còn trong kho!")
-                        window["sell_customer_name_may"].update("")
-                        window["sell_customer_phone_may"].update("")
-            except mysql.connector.Error as err:
-                sg.popup_error(f"Lỗi khi lấy thông tin bán: {err}")
-                window["sell_customer_name_may"].update("")
-                window["sell_customer_phone_may"].update("")
-
-            print(f"Đã chọn máy photocopy ID {selected_machine_id}")
-    elif event == "Xác Nhận Nhập Máy":
-        try:
-            loai_may = values["import_loai_may"].strip()
-            ten_may = values["import_ten_may"].strip()
-            so_counter = values["import_so_counter"].strip()
-            gia_nhap_may = values["import_gia_nhap_may"].strip()
-            serial_number = values["import_serial_number"].strip()
-            if not loai_may or not ten_may or not so_counter or not gia_nhap_may or not serial_number:
-                sg.popup_error("Vui lòng nhập đầy đủ thông tin máy, bao gồm số serial!")
-                return current_item_id, selected_machine_id, vat_tu_page, photocopy_page
-            so_counter = int(so_counter)
-            gia_nhap = float(gia_nhap_may)
-            machine_id = inventory_manager.import_photocopy_machine(loai_may, ten_may, so_counter, gia_nhap,
-                                                                    serial_number)
-            if machine_id:
-                sg.popup("Nhập máy photocopy thành công!")
-                inventory_manager.machines_cache = None
-                refresh_photocopy_table(window, inventory_manager, photocopy_page)
-                show_content('machines_list')
-                window["import_loai_may"].update("")
-                window["import_ten_may"].update("")
-                window["import_so_counter"].update("")
-                window["import_gia_nhap_may"].update("")
-                window["import_serial_number"].update("")
-                print(f"Đã làm mới bảng sau khi nhập máy ID {machine_id}")
-            else:
-                sg.popup_error("Không thể nhập máy!")
-        except ValueError as e:
-            sg.popup_error(f"Lỗi dữ liệu nhập máy: {e}")
+            machines = inventory_manager.fetch_all_photocopy_machines(offset=(photocopy_page - 1) * 15, limit=15)
+            if selected_rows[0] < len(machines):
+                selected_machine_id = machines[selected_rows[0]][0]
+                window["sell_loai_may"].update(machines[selected_rows[0]][1])
+                window["sell_ten_may"].update(machines[selected_rows[0]][2])
+                window["sell_so_counter"].update(str(machines[selected_rows[0]][3]))
+                window["sell_gia_nhap"].update(str(machines[selected_rows[0]][6]))
+                window["sell_serial_number"].update(machines[selected_rows[0]][7])
     elif event == "Xác Nhận Bán Máy":
-        if values["sell_so_luong_ban_may"] and values["sell_gia_ban_may"] and values["sell_customer_name_may"] and \
-                values["sell_customer_phone_may"]:
-            try:
-                selected_rows = values["photocopy_table"]
-                if not selected_rows:
-                    sg.popup_error("Vui lòng chọn một máy photocopy từ danh sách để bán!")
-                    return current_item_id, selected_machine_id, vat_tu_page, photocopy_page
-                machines = inventory_manager.fetch_all_photocopy_machines(offset=(photocopy_page - 1) * 15, limit=15)
-                if not machines:
-                    sg.popup_error("Không có máy nào trong danh sách để bán!")
-                    return current_item_id, selected_machine_id, vat_tu_page, photocopy_page
-                machine = machines[selected_rows[0]]
-                machine_id = machine[0]
-                quantity = int(values["sell_so_luong_ban_may"])
-                price = float(values["sell_gia_ban_may"])
-                customer_name = values["sell_customer_name_may"].strip()
-                customer_phone = values["sell_customer_phone_may"].strip()
-                if inventory_manager.sell_photocopy_machine(machine_id, quantity, price, customer_name, customer_phone):
-                    sg.popup("Bán máy photocopy thành công!")
-                    inventory_manager.machines_cache = None
-                    refresh_photocopy_table(window, inventory_manager, photocopy_page)
-                    refresh_photocopy_sales_table(window, inventory_manager)
-                    window["sell_so_luong_ban_may"].update("")
-                    window["sell_gia_ban_may"].update("")
-                    window["sell_customer_name_may"].update("")
-                    window["sell_customer_phone_may"].update("")
-                    window["sell_customer_email_may"].update("")
-                    window["sell_loai_may"].update("")
-                    window["sell_ten_may"].update("")
-                    window["sell_so_counter"].update("")
-                    window["sell_gia_nhap"].update("")
-                    window["sell_serial_number"].update("")
-                    show_content('sell_machine')
-                else:
-                    sg.popup_error("Không thể bán máy, kiểm tra trạng thái hoặc dữ liệu!")
-            except ValueError as e:
-                sg.popup_error(f"Lỗi dữ liệu: {e}")
+        if not selected_machine_id:
+            sg.popup_error("Vui lòng chọn một máy để bán!")
         else:
-            sg.popup_error("Vui lòng nhập đủ thông tin bán máy!")
+            so_luong_ban_may = values["sell_so_luong_ban_may"]
+            gia_ban_may = values["sell_gia_ban_may"]
+            customer_name_may = values["sell_customer_name_may"]
+            customer_phone_may = values["sell_customer_phone_may"]
+            if not all([so_luong_ban_may, gia_ban_may, customer_name_may, customer_phone_may]):
+                sg.popup_error("Vui lòng điền đầy đủ thông tin bán máy!")
+            else:
+                try:
+                    so_luong_ban_may = int(so_luong_ban_may)
+                    gia_ban_may = float(gia_ban_may)
+                    if inventory_manager.sell_photocopy_machine(selected_machine_id, so_luong_ban_may, gia_ban_may,
+                                                                customer_name_may, customer_phone_may):
+                        sg.popup("Bán máy thành công!")
+                        window["sell_so_luong_ban_may"].update("1")
+                        window["sell_gia_ban_may"].update("")
+                        window["sell_customer_name_may"].update("")
+                        window["sell_customer_phone_may"].update("")
+                        refresh_photocopy_table(window, inventory_manager, photocopy_page)
+                        refresh_photocopy_sales_table(window, inventory_manager)
+                    else:
+                        sg.popup_error("Bán máy thất bại!")
+                except ValueError:
+                    sg.popup_error("Số lượng bán và giá bán phải là số!")
+
+    # Cho thuê máy
     elif event == "Xác Nhận Cho Thuê":
-        if values["rent_customer_name"] and values["rent_customer_phone"] and values["rent_start_date"] and values[
-            "rent_end_date"] and values["rent_price"]:
-            try:
-                selected_rows = values["photocopy_table"]
-                if not selected_rows:
-                    sg.popup_error("Vui lòng chọn một máy photocopy từ danh sách để cho thuê!")
-                    return current_item_id, selected_machine_id, vat_tu_page, photocopy_page
-                machines = inventory_manager.fetch_available_photocopy_machines(offset=(photocopy_page - 1) * 15,
-                                                                                limit=15)
-                if not machines:
-                    sg.popup_error("Không có máy nào trong kho để cho thuê!")
-                    return current_item_id, selected_machine_id, vat_tu_page, photocopy_page
-                machine = machines[selected_rows[0]]
-                machine_id = machine[0]
-                start_date = datetime.strptime(values["rent_start_date"], "%Y-%m-%d").date()
-                end_date = datetime.strptime(values["rent_end_date"], "%Y-%m-%d").date()
-                if start_date > end_date:
-                    sg.popup_error("Ngày bắt đầu phải nhỏ hơn ngày kết thúc!")
-                    return current_item_id, selected_machine_id, vat_tu_page, photocopy_page
-                rental_price = float(values["rent_price"])
-                customer_name = values["rent_customer_name"].strip()
-                customer_phone = values["rent_customer_phone"].strip()
-                if inventory_manager.rent_photocopy_machine(machine_id, customer_name, customer_phone, start_date,
-                                                            end_date, rental_price):
-                    sg.popup("Cho thuê máy photocopy thành công!")
-                    inventory_manager.machines_cache = None
-                    refresh_photocopy_table(window, inventory_manager, photocopy_page)
-                    refresh_rental_table(window, inventory_manager)
-                    window["rent_customer_name"].update("")
-                    window["rent_customer_phone"].update("")
-                    window["rent_start_date"].update("")
-                    window["rent_end_date"].update("")
-                    window["rent_price"].update("")
-                    window["rent_loai_may"].update("")
-                    window["rent_ten_may"].update("")
-                    window["rent_so_counter"].update("")
-                    window["rent_gia_nhap"].update("")
-                    window["rent_serial_number"].update("")
-                    show_content('rent_machine')
-            except ValueError as e:
-                sg.popup_error(f"Lỗi dữ liệu: {e}")
+        if not selected_machine_id:
+            sg.popup_error("Vui lòng chọn một máy để cho thuê!")
         else:
-            sg.popup_error("Vui lòng nhập đủ thông tin cho thuê máy!")
+            customer_name = values["rent_customer_name"]
+            customer_phone = values["rent_customer_phone"]
+            start_date = values["rent_start_date"]
+            end_date = values["rent_end_date"]
+            rental_price = values["rent_price"]
+            if not all([customer_name, customer_phone, start_date, end_date, rental_price]):
+                sg.popup_error("Vui lòng điền đầy đủ thông tin cho thuê!")
+            else:
+                try:
+                    start_date = datetime.strptime(start_date, '%Y-%m-%d').date()
+                    end_date = datetime.strptime(end_date, '%Y-%m-%d').date()
+                    rental_price = float(rental_price)
+                    if inventory_manager.rent_photocopy_machine(selected_machine_id, customer_name, customer_phone,
+                                                                start_date, end_date, rental_price):
+                        sg.popup("Cho thuê máy thành công!")
+                        window["rent_customer_name"].update("")
+                        window["rent_customer_phone"].update("")
+                        window["rent_start_date"].update("")
+                        window["rent_end_date"].update("")
+                        window["rent_price"].update("")
+                        refresh_photocopy_table(window, inventory_manager, photocopy_page)
+                        refresh_rental_table(window, inventory_manager)
+                    else:
+                        sg.popup_error("Cho thuê máy thất bại!")
+                except ValueError:
+                    sg.popup_error("Ngày và giá thuê phải đúng định dạng!")
+
+    # Trả máy
     elif event == "rental_table_return":
         selected_rows = values["rental_table_return"]
         if selected_rows:
             rentals = inventory_manager.fetch_rental_history()
-            if rentals and selected_rows[0] < len(rentals):
-                rental = rentals[selected_rows[0]]
-                window["return_machine_name"].update(rental[0])
-                window["return_customer_name_display"].update(rental[1])
-                window["return_customer_phone_display"].update(rental[2])
-                window["return_start_date"].update(str(rental[3]))
-                window["return_end_date"].update(str(rental[4]))
-                window["return_rental_price"].update(f"{rental[5]:,.2f} VND")
+            if selected_rows[0] < len(rentals):
+                selected_rental = rentals[selected_rows[0]]
+                window["return_machine_name"].update(selected_rental[0])
+                window["return_customer_name_display"].update(selected_rental[1])
+                window["return_customer_phone_display"].update(selected_rental[2])
+                window["return_start_date"].update(str(selected_rental[3]))
+                window["return_end_date"].update(str(selected_rental[4]))
+                window["return_rental_price"].update(str(selected_rental[5]))
     elif event == "Xác Nhận Trả Máy":
-        if values["return_date"] and values["return_counter"] and values["return_customer_name_input"] and values[
-            "return_customer_phone_input"]:
-            selected_rows = values["rental_table_return"]
-            if selected_rows:
-                rentals = inventory_manager.fetch_rental_history()
-                if not rentals or selected_rows[0] >= len(rentals):
-                    sg.popup_error("Không có máy nào đang cho thuê hoặc bản ghi không hợp lệ!")
-                    return current_item_id, selected_machine_id, vat_tu_page, photocopy_page
-                machine_name = rentals[selected_rows[0]][0]
-                inventory_manager.cursor.execute(
-                    "SELECT id FROM photocopy_machines WHERE ten_may = %s AND trang_thai = 'Đang Cho Thuê'",
-                    (machine_name,)
-                )
-                machine = inventory_manager.cursor.fetchone()
-                if not machine:
-                    sg.popup_error(f"Máy {machine_name} không đang cho thuê!")
-                    return current_item_id, selected_machine_id, vat_tu_page, photocopy_page
-                machine_id = machine[0]
+        selected_rows = values["rental_table_return"]
+        if not selected_rows:
+            sg.popup_error("Vui lòng chọn một máy để trả!")
+        else:
+            return_date = values["return_date"]
+            return_counter = values["return_counter"]
+            return_customer_name = values["return_customer_name_input"]
+            return_customer_phone = values["return_customer_phone_input"]
+            if not all([return_date, return_counter, return_customer_name, return_customer_phone]):
+                sg.popup_error("Vui lòng điền đầy đủ thông tin trả máy!")
+            else:
                 try:
-                    return_date = datetime.strptime(values["return_date"], "%Y-%m-%d").date()
-                    return_counter = int(values["return_counter"])
-                    return_customer_name = values["return_customer_name_input"].strip()
-                    return_customer_phone = values["return_customer_phone_input"].strip()
+                    rentals = inventory_manager.fetch_rental_history()
+                    machine_id = inventory_manager.fetch_all_photocopy_machines()[selected_rows[0]][0]
+                    return_date = datetime.strptime(return_date, '%Y-%m-%d').date()
+                    return_counter = int(return_counter)
                     if inventory_manager.return_photocopy_machine(machine_id, return_date, return_counter,
                                                                   return_customer_name, return_customer_phone):
-                        sg.popup("Trả máy photocopy thành công!")
-                        inventory_manager.machines_cache = None
-                        refresh_photocopy_table(window, inventory_manager, photocopy_page)
-                        refresh_rental_table(window, inventory_manager)
+                        sg.popup("Trả máy thành công!")
                         window["return_date"].update("")
                         window["return_counter"].update("")
                         window["return_customer_name_input"].update("")
                         window["return_customer_phone_input"].update("")
-                        window["return_machine_name"].update("")
-                        window["return_customer_name_display"].update("")
-                        window["return_customer_phone_display"].update("")
-                        window["return_start_date"].update("")
-                        window["return_end_date"].update("")
-                        window["return_rental_price"].update("")
-                        show_content('return_machine')
-                except ValueError as e:
-                    sg.popup_error(f"Lỗi dữ liệu: {e}")
-            else:
-                sg.popup_error("Vui lòng chọn một máy đang cho thuê để trả!")
-        else:
-            sg.popup_error(
-                "Vui lòng nhập đầy đủ thông tin trả máy: Ngày Trả, Số Counter Trả, Tên và SĐT Khách Hàng Trả!")
+                        refresh_photocopy_table(window, inventory_manager, photocopy_page)
+                        refresh_rental_table(window, inventory_manager)
+                    else:
+                        sg.popup_error("Trả máy thất bại!")
+                except ValueError:
+                    sg.popup_error("Ngày trả và số counter phải đúng định dạng!")
+
+    # Bảo trì máy
     elif event == "Xác Nhận Bảo Trì":
-        selected_rows = values["photocopy_table"]
-        if not selected_rows:
-            sg.popup_error("Vui lòng chọn một máy photocopy từ danh sách để thêm bảo trì!")
-            return current_item_id, selected_machine_id, vat_tu_page, photocopy_page
-        machine_id = \
-        inventory_manager.fetch_all_photocopy_machines(offset=(photocopy_page - 1) * 15, limit=15)[selected_rows[0]][0]
-        desc = values["maintenance_desc"].strip()
-        try:
-            cost = float(values["maintenance_cost"] or 0)
-            if inventory_manager.add_maintenance_record(machine_id, desc, cost):
-                sg.popup("Thêm bảo trì thành công!")
-                refresh_photocopy_table(window, inventory_manager, photocopy_page)
-                refresh_maintenance_table(window, inventory_manager)
-                window["maintenance_desc"].update("")
-                window["maintenance_cost"].update("")
-                show_content('maintenance')
+        if not selected_machine_id:
+            sg.popup_error("Vui lòng chọn một máy để bảo trì!")
+        else:
+            desc = values["maintenance_desc"]
+            cost = values["maintenance_cost"]
+            if not all([desc, cost]):
+                sg.popup_error("Vui lòng điền đầy đủ thông tin bảo trì!")
             else:
-                sg.popup_error("Không thể thêm bảo trì!")
-        except ValueError:
-            sg.popup_error("Chi phí phải là số hợp lệ!")
-    elif event == "Tìm":
-        search_text = values["Search"]
-        filtered_data = [row for row in inventory_manager.fetch_all_items(offset=0, limit=1000) if
-                         search_text.lower() in str(row).lower()]
-        display_filtered = [[row[0], row[1], row[2], row[3], row[4] if row[4] is not None else 0] for row in
-                            filtered_data]
-        window['table'].update(values=display_filtered[:10])
-        window['page_vat_tu'].update("Trang 1 (Tìm kiếm)")
-    elif event == "prev_vat_tu" and vat_tu_page > 1:
-        vat_tu_page -= 1
-        refresh_items_table(window, inventory_manager, vat_tu_page)
+                try:
+                    cost = float(cost)
+                    if inventory_manager.add_maintenance_record(selected_machine_id, desc, cost):
+                        sg.popup("Thêm bảo trì thành công!")
+                        window["maintenance_desc"].update("")
+                        window["maintenance_cost"].update("")
+                        refresh_maintenance_table(window, inventory_manager)
+                    else:
+                        sg.popup_error("Thêm bảo trì thất bại!")
+                except ValueError:
+                    sg.popup_error("Chi phí phải là số!")
+
+    # Phân trang vật tư
     elif event == "next_vat_tu":
         vat_tu_page += 1
         items = inventory_manager.fetch_all_items(offset=(vat_tu_page - 1) * 10, limit=10)
         if not items and vat_tu_page > 1:
             vat_tu_page -= 1
         refresh_items_table(window, inventory_manager, vat_tu_page)
-    elif event == "prev_photocopy" and photocopy_page > 1:
-        photocopy_page -= 1
-        refresh_photocopy_table(window, inventory_manager, photocopy_page)
+    elif event == "prev_vat_tu":
+        if vat_tu_page > 1:
+            vat_tu_page -= 1
+            refresh_items_table(window, inventory_manager, vat_tu_page)
+
+    # Phân trang máy photocopy
     elif event == "next_photocopy":
         photocopy_page += 1
         machines = inventory_manager.fetch_all_photocopy_machines(offset=(photocopy_page - 1) * 15, limit=15)
         if not machines and photocopy_page > 1:
             photocopy_page -= 1
         refresh_photocopy_table(window, inventory_manager, photocopy_page)
-    elif event == "Xóa Toàn Bộ Dữ Liệu":
-        if user_role != 'admin':
-            sg.popup_error("Chỉ quản trị viên (admin) mới có quyền xóa toàn bộ dữ liệu!",
-                           title="Quyền truy cập bị từ chối")
-        else:
-            if sg.popup_yes_no(
-                    "Bạn có chắc chắn muốn xóa toàn bộ dữ liệu?\nHành động này sẽ xóa tất cả vật tư, máy photocopy, lịch sử bán/thuê (trừ thông tin người dùng).\nDữ liệu sẽ được backup trước khi xóa!",
-                    title="Cảnh báo") == "Yes":
-                backup_path = sg.popup_get_file("Chọn nơi lưu file backup", save_as=True,
-                                                file_types=(("Excel Files", "*.xlsx"),), default_extension=".xlsx")
-                if backup_path:
-                    if not backup_path.endswith('.xlsx'):
-                        backup_path += '.xlsx'
-                    if inventory_manager.backup_all_data(backup_path):
-                        if inventory_manager.clear_all_data():
-                            sg.popup("Đã xóa toàn bộ dữ liệu thành công! Dữ liệu đã được backup tại: " + backup_path)
-                            refresh_items_table(window, inventory_manager, vat_tu_page)
-                            refresh_sales_table(window, inventory_manager)
-                            refresh_import_table(window, inventory_manager)
-                            refresh_photocopy_table(window, inventory_manager, photocopy_page)
-                            refresh_rental_table(window, inventory_manager)
-                            refresh_maintenance_table(window, inventory_manager)
-                            refresh_photocopy_sales_table(window, inventory_manager)
-                        else:
-                            sg.popup_error("Không thể xóa dữ liệu!")
-                    else:
-                        sg.popup_error("Backup thất bại, không tiếp tục xóa dữ liệu!")
-                else:
-                    sg.popup_error("Vui lòng chọn đường dẫn backup để tiếp tục!")
-    elif event == "Làm Mới":
-        inventory_manager.items_cache = None
-        inventory_manager.sales_cache = None
-        inventory_manager.import_cache = None
-        inventory_manager.machines_cache = None
-        inventory_manager.photocopy_sales_cache = None
-        inventory_manager.rental_cache = None
-        inventory_manager.maintenance_cache = None
-        refresh_items_table(window, inventory_manager, vat_tu_page)
-        refresh_sales_table(window, inventory_manager)
-        refresh_import_table(window, inventory_manager)
-        refresh_photocopy_table(window, inventory_manager, photocopy_page)
-        refresh_rental_table(window, inventory_manager)
-        refresh_maintenance_table(window, inventory_manager)
-        refresh_photocopy_sales_table(window, inventory_manager)
-        sg.popup("Đã làm mới toàn bộ dữ liệu!")
-    elif event in ("Xuất Excel", "Xuất Lịch Sử"):
-        file_path = sg.popup_get_file("Lưu file Excel", save_as=True, file_types=(("Excel Files", "*.xlsx"),),
-                                      default_extension=".xlsx")
-        if file_path:
-            if not file_path.endswith('.xlsx'):
-                file_path += '.xlsx'
-            is_photocopy = window.Element('TabGroup').Get() == 'Quản Lý Máy Photocopy'
-            is_history = "history" in file_path.lower() or event == "Xuất Lịch Sử"
-            if inventory_manager.export_to_excel(file_path, is_history, is_photocopy):
-                sg.popup("Xuất Excel thành công!")
+    elif event == "prev_photocopy":
+        if photocopy_page > 1:
+            photocopy_page -= 1
+            refresh_photocopy_table(window, inventory_manager, photocopy_page)
+
+    # Thống kê
     elif event == "Thống Kê":
         if window.Element('TabGroup').Get() == 'Quản Lý Vật Tư':
             show_vat_tu_stats_window(inventory_manager)
         else:
             show_photocopy_detailed_stats_window(inventory_manager)
-    elif event == "Thoát":
-        window.close()
+
+    # Xuất Excel
+    elif event == "Xuất Excel":
+        file_path = sg.popup_get_file("Chọn nơi lưu file Excel", save_as=True, file_types=(("Excel Files", "*.xlsx"),))
+        if file_path:
+            if not file_path.endswith('.xlsx'):
+                file_path += '.xlsx'
+            current_tab = window.Element('TabGroup').Get()
+            success = inventory_manager.export_to_excel(file_path, is_history=False,
+                                                        is_photocopy=(current_tab == 'Quản Lý Máy Photocopy'))
+            if not success:
+                sg.popup_error("Không thể xuất file Excel!")
+
+    # Xuất lịch sử
+    elif event == "Xuất Lịch Sử":
+        file_path = sg.popup_get_file("Chọn nơi lưu file Excel", save_as=True, file_types=(("Excel Files", "*.xlsx"),))
+        if file_path:
+            if not file_path.endswith('.xlsx'):
+                file_path += '.xlsx'
+            current_tab = window.Element('TabGroup').Get()
+            success = inventory_manager.export_to_excel(file_path, is_history=True,
+                                                        is_photocopy=(current_tab == 'Quản Lý Máy Photocopy'))
+            if not success:
+                sg.popup_error("Không thể xuất file Excel!")
+
+    # Xóa toàn bộ dữ liệu
+    elif event == "Xóa Toàn Bộ Dữ Liệu" and user_role == 'admin':
+        file_path = sg.popup_get_file("Chọn nơi lưu file backup", save_as=True, file_types=(("Excel Files", "*.xlsx"),))
+        if file_path:
+            if not file_path.endswith('.xlsx'):
+                file_path += '.xlsx'
+            if inventory_manager.backup_all_data(file_path):
+                if sg.popup_yes_no("Bạn có chắc chắn muốn xóa toàn bộ dữ liệu không?") == "Yes":
+                    if inventory_manager.clear_all_data():
+                        sg.popup("Xóa toàn bộ dữ liệu thành công!")
+                        vat_tu_page = 1
+                        photocopy_page = 1
+                        refresh_items_table(window, inventory_manager, vat_tu_page)
+                        refresh_sales_table(window, inventory_manager)
+                        refresh_import_table(window, inventory_manager)
+                        refresh_photocopy_table(window, inventory_manager, photocopy_page)
+                        refresh_rental_table(window, inventory_manager)
+                        refresh_maintenance_table(window, inventory_manager)
+                        refresh_photocopy_sales_table(window, inventory_manager)
+
+    # Làm mới
+    elif event == "Làm Mới":
+        current_tab = window.Element('TabGroup').Get()
+        if current_tab == 'Quản Lý Vật Tư':
+            refresh_items_table(window, inventory_manager, vat_tu_page)
+            refresh_sales_table(window, inventory_manager)
+            refresh_import_table(window, inventory_manager)
+        else:
+            refresh_photocopy_table(window, inventory_manager, photocopy_page)
+            refresh_rental_table(window, inventory_manager)
+            refresh_maintenance_table(window, inventory_manager)
+            refresh_photocopy_sales_table(window, inventory_manager)
 
     return current_item_id, selected_machine_id, vat_tu_page, photocopy_page
-
-
-if __name__ == "__main__":
-    print("This module is not meant to be run directly. Please run main.py instead.")

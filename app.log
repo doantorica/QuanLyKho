@@ -1,0 +1,29 @@
+2025-02-28 17:32:53,597 - INFO - Database setup completed successfully
+2025-02-28 17:32:53,709 - INFO - Fetched 2 items from database (offset=0, limit=10)
+2025-02-28 17:32:53,710 - INFO - Fetched 0 sales history records
+2025-02-28 17:32:53,710 - INFO - Fetched 2 import history records
+2025-02-28 17:33:02,320 - INFO - Deleted item ID 8 successfully
+2025-02-28 17:33:03,427 - INFO - Fetched 1 items from database (offset=0, limit=10)
+2025-02-28 17:33:06,240 - INFO - Fetched 1 photocopy machines (offset=0, limit=15)
+2025-02-28 17:33:07,931 - INFO - Fetched 1 photocopy machines (offset=0, limit=15)
+2025-02-28 17:33:09,769 - INFO - Fetched 1 photocopy machines (offset=0, limit=15)
+2025-02-28 17:33:10,890 - INFO - Deleted photocopy machine ID 8 successfully
+2025-02-28 17:33:12,059 - INFO - Fetched 0 photocopy machines (offset=0, limit=15)
+2025-02-28 17:33:40,199 - INFO - Imported photocopy machine ID 9: Ricoh mp 6055 with serial rc09876
+2025-02-28 17:33:41,357 - INFO - Fetched 1 photocopy machines (offset=0, limit=15)
+2025-02-28 17:33:42,594 - INFO - Fetched 1 photocopy machines (offset=0, limit=15)
+2025-02-28 17:33:55,475 - INFO - Fetched 1 photocopy machines (offset=0, limit=1000)
+2025-02-28 17:33:55,550 - INFO - Exported data to Excel file: /Users/doantorica/Desktop/121212.xlsx
+2025-02-28 17:34:06,247 - INFO - Fetched detailed photocopy stats: [['Bán Máy', 3, Decimal('30900000.00'), Decimal('14810001.00')], ['Thuê Máy', 2, Decimal('22000000.00'), Decimal('22000000.00')]]
+2025-02-28 17:34:15,521 - INFO - Fetched 3 photocopy sales history records
+2025-02-28 17:34:15,531 - INFO - Exported data to Excel file: /Users/doantorica/Desktop/1.xlsx
+2025-02-28 17:34:33,318 - INFO - Fetched detailed photocopy stats: [['Bán Máy', 3, Decimal('30900000.00'), Decimal('14810001.00')], ['Thuê Máy', 2, Decimal('22000000.00'), Decimal('22000000.00')]]
+2025-02-28 17:34:48,315 - INFO - Imported 1 units of item ID 11: Flim Sấy
+2025-02-28 17:34:49,574 - INFO - Fetched 2 items from database (offset=0, limit=10)
+2025-02-28 17:34:49,575 - INFO - Fetched 3 import history records
+2025-02-28 17:34:52,823 - INFO - Fetched detailed sales stats: 0 records
+2025-02-28 17:35:06,912 - WARNING - No sales history data to export
+2025-02-28 17:35:15,193 - INFO - Fetched 2 items from database (offset=0, limit=1000)
+2025-02-28 17:35:15,200 - INFO - Exported data to Excel file: /Users/doantorica/Desktop/2.xlsx
+2025-02-28 18:12:15,068 - ERROR - database - Error backing up data to /Users/doantorica/Desktop/lưu vattu.xlsx: At least one sheet must be visible
+2025-02-28 18:12:34,864 - ERROR - database - Error backing up data to /Users/doantorica/Desktop/88888.xlsx: At least one sheet must be visible

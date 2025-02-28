@@ -91,8 +91,10 @@ def create_layout():
                   enable_events=True, auto_size_columns=False, col_widths=[8, 15, 20, 15, 15, 15, 15, 20],
                   justification='center', num_rows=15, row_height=30, font=('Helvetica', 10),
                   header_font=('Helvetica', 10, 'bold'), expand_x=True, expand_y=True)],
+        [sg.Button("Cập Nhật Counter", key="update_counter", button_color=('white', '#28a745')),
+         sg.Button("Kiểm Tra Bảo Trì", key="check_maintenance", button_color=('white', '#ffc107'))],
         [sg.Button("Trang Trước", key="prev_photocopy"), sg.Button("Trang Sau", key="next_photocopy"),
-         sg.Text("Trang 1", key="page_photocopy"), sg.Button("Xóa Máy", button_color=('white', '#dc3545'))]
+         sg.Text("Trang 1", key="page_photocopy"), sg.Button("Xóa", key="Xóa", button_color=('white', '#dc3545'))]
     ]
 
     import_machine_content = [
@@ -125,16 +127,16 @@ def create_layout():
         [sg.Text("Giá Bán", size=label_size, font=('Helvetica', 10)),
          sg.Input(key="sell_gia_ban_may", size=input_size, font=('Helvetica', 10))],
         [sg.Text("Tên Khách Hàng", size=label_size, font=('Helvetica', 10)),
-         sg.Input(key="sell_customer_name_may", size=input_size, font=('Helvetica', 10))],  # Loại bỏ readonly
+         sg.Input(key="sell_customer_name_may", size=input_size, font=('Helvetica', 10))],
         [sg.Text("SĐT Khách Hàng", size=label_size, font=('Helvetica', 10)),
-         sg.Input(key="sell_customer_phone_may", size=input_size, font=('Helvetica', 10))],  # Loại bỏ readonly
+         sg.Input(key="sell_customer_phone_may", size=input_size, font=('Helvetica', 10))],
         [sg.Text("Email Khách Hàng", size=label_size, font=('Helvetica', 10)),
          sg.Input(key="sell_customer_email_may", size=input_size, font=('Helvetica', 10))],
         [sg.Button("Xác Nhận Bán Máy", size=button_size, font=('Helvetica', 10), button_color=('white', '#17a2b8'))],
         [sg.Table(values=[],
-                  headings=["Tên Máy", "Ngày Bán", "Giá Bán", "Tên Khách Hàng", "SĐT"],
+                  headings=["Tên Máy", "Ngày Bán", "Giá Bán", "Lợi Nhuận", "Tên Khách Hàng", "SĐT"],
                   key='photocopy_sales_table',
-                  auto_size_columns=False, col_widths=[20, 15, 15, 20, 15],
+                  auto_size_columns=False, col_widths=[20, 15, 15, 15, 20, 15],
                   justification='center', num_rows=10, row_height=30, font=('Helvetica', 10),
                   header_font=('Helvetica', 10, 'bold'), expand_x=True)]
     ]
@@ -162,9 +164,9 @@ def create_layout():
          sg.Input(key="rent_price", size=input_size, font=('Helvetica', 10))],
         [sg.Button("Xác Nhận Cho Thuê", size=button_size, font=('Helvetica', 10), button_color=('white', '#ffc107'))],
         [sg.Table(values=[],
-                  headings=["Tên Máy", "Khách Hàng", "SĐT", "Ngày Bắt Đầu", "Ngày Kết Thúc", "Giá Thuê", "Ngày Trả", "Counter Trả"],
+                  headings=["Tên Máy", "Khách Hàng", "SĐT", "Ngày Bắt Đầu", "Ngày Kết Thúc", "Giá Thuê", "Lợi Nhuận", "Ngày Trả", "Counter Trả"],
                   key='rental_table',
-                  auto_size_columns=False, col_widths=[20, 15, 15, 15, 15, 15, 15, 15],
+                  auto_size_columns=False, col_widths=[20, 15, 15, 15, 15, 15, 15, 15, 15],
                   justification='center', num_rows=10, row_height=30, font=('Helvetica', 10),
                   header_font=('Helvetica', 10, 'bold'), expand_x=True)]
     ]
